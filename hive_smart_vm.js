@@ -1,109 +1,5 @@
 const https = require('https');
 
-// Function to get the public key from Hive blockchain
-async function getPublicKey(username) {
-    return new Promise((resolve, reject) => {
-        const options = {
-            hostname: 'api.hive.blog',
-            port: 443,
-            path: '/',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        };
-
-        const req = https.request(options, (res) => {
-            let data = '';
-
-            res.on('data', (chunk) => {
-                data += chunk;
-            });
-
-            res.on('end', () => {
-                try {
-                    const response = JSON.parse(data);
-                    if (response.result && response.result[0] && response.result[0].posting.key_auths.length > 0) {
-                        const publicKey = response.result[0].posting.key_auths[0][0];
-                        resolve(publicKey);
-                    } else {
-                        reject("User not found, public key not available, or key_auths array is empty");
-                    }
-                } catch (error) {
-                    reject(error);
-                }
-            });
-        });
-
-        req.on('error', (e) => {
-            reject(e);
-        });
-
-        // JSON-RPC request payload to get account details
-        const payload = JSON.stringify({
-            jsonrpc: "2.0",
-            method: "condenser_api.get_accounts",
-            params: [[username]],
-            id: 1
-        });
-
-        req.write(payload);
-        req.end();
-    });
-}
-
-// Function to get the current time from Hive blockchain
-function getCurrentHiveTime() {
-    return new Promise((resolve, reject) => {
-        const options = {
-            hostname: 'api.hive.blog',
-            port: 443,
-            path: '/',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        };
-
-        const req = https.request(options, (res) => {
-            let data = '';
-
-            res.on('data', (chunk) => {
-                data += chunk;
-            });
-
-            res.on('end', () => {
-                try {
-                    const response = JSON.parse(data);
-                    if (response.result && response.result.time) {
-                        const timestamp = new Date(response.result.time + 'Z');
-                        resolve(timestamp);
-                    } else {
-                        reject("Timestamp not found in response");
-                    }
-                } catch (error) {
-                    reject(error);
-                }
-            });
-        });
-
-        req.on('error', (e) => {
-            reject(e);
-        });
-
-        // JSON-RPC request payload to get the dynamic global properties
-        const payload = JSON.stringify({
-            jsonrpc: "2.0",
-            method: "condenser_api.get_dynamic_global_properties",
-            params: [],
-            id: 1
-        });
-
-        req.write(payload);
-        req.end();
-    });
-}
-
 // Function to get the local system time
 function getLocalTime() {
     return new Date(); // Gets the current system time
@@ -117,42 +13,11 @@ function formatTimestamp(timestamp) {
 // Main execution block
 (async () => {
     try {
-        const username = 'username'; // Replace with actual username input logic
-        const publicKey = await getPublicKey(username);
-        console.log(`Public Key for ${username}: ${publicKey}`);
-
-        // First Hive time check
-        const firstHiveTime = await getCurrentHiveTime();
-
         // Local time check
         const localTime = getLocalTime();
-
-        // Second Hive time check
-        const secondHiveTime = await getCurrentHiveTime();
-
-        if (firstHiveTime instanceof Date && secondHiveTime instanceof Date &&
-            !isNaN(firstHiveTime) && !isNaN(secondHiveTime)) {
-
-            const firstHiveTimestamp = firstHiveTime.getTime();
-            const secondHiveTimestamp = secondHiveTime.getTime();
-            const targetTimestamp = new Date("2023-12-17T15:09:00Z").getTime();
-
-            console.log("First Hive Timestamp:", formatTimestamp(firstHiveTime));
-            console.log("Local System Timestamp:", formatTimestamp(localTime));
-            console.log("Second Hive Timestamp:", formatTimestamp(secondHiveTime));
-            console.log("Target Timestamp:", formatTimestamp(new Date(targetTimestamp)));
-
-            // Check if both Hive time checks are close enough and after the target time
-            if (Math.abs(firstHiveTimestamp - secondHiveTimestamp) < 1000 && // 1 second tolerance
-                firstHiveTimestamp >= targetTimestamp && secondHiveTimestamp >= targetTimestamp) {
-                console.log("VM should be booted now.");
-                await bootVM();
-            } else {
-                console.log("The VM boot is scheduled for a later time, or time check failed.");
-            }
-        } else {
-            console.error("Invalid Hive API response:", firstHiveTime, secondHiveTime);
-        }
+        console.log("Local System Timestamp:", formatTimestamp(localTime));
+        console.log("VM is booting now.");
+        await bootVM();
     } catch (error) {
         console.error('Error:', error);
     }
@@ -181,7 +46,12 @@ _g = {
         return promise;
     },
 };
-let consize = process.stdout.getWindowSize();
+let consize;
+if (process.stdout.isTTY && typeof process.stdout.getWindowSize === 'function') {
+    consize = process.stdout.getWindowSize();
+} else {
+    consize = [80, 24]; // Default size [width, height]
+}
 (async () => {
     var fs = require("fs");
     if (!process.argv[2])
